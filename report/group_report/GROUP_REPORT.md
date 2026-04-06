@@ -1,7 +1,7 @@
 # Group Report: Lab 3 - Production-Grade Agentic System
 
-- **Team Name**: DangVH Team
-- **Team Members**: Dang VH
+- **Team Name**: C401-E5 Team
+- **Team Members**: Vu Hai Dang - 2A202600339, Tran Quang Huy - 2A202600303, Tran Ngoc Son - 2A202600430, Luong Anh Tuan - 2A202600113, Luong Tien Dung - 2A202600117, Le Hoang Dat - 2A202600377
 - **Deployment Date**: 2026-04-06
 
 ---
@@ -12,11 +12,11 @@ This report documents the design, implementation, and evaluation of a **Travel P
 
 We compared three systems:
 1. **Chatbot Baseline** — Standard GPT-4o with no tool access
-2. **Agent v1** — Basic ReAct loop with JSON action parsing
-3. **Agent v2** — Improved prompts, retry logic, and guardrails
+2. **Agent v1** — Basic ReAct loop (thiếu Constraints và Output Format rõ ràng)
+3. **Agent v2 (Production-Grade)** — Cải thiện System Prompt với **5 thành phần cốt lõi** (Identity, Capabilities, Instructions, Constraints, Output Format), kết hợp retry logic và guardrails.
 
 - **Success Rate**: Agent v2 achieved **100% task completion** on 5 test cases (vs 20% for chatbot on tool-dependent queries)
-- **Key Outcome**: The agent solved 80% more multi-step queries than the chatbot baseline by correctly utilizing weather-conditional branching to decide between outdoor activities + hotels vs indoor cafe recommendations. Agent v2 reduced parse errors to 0 and cut latency by 50% vs v1 on activity searches.
+- **Key Outcome**: The agent solved 80% more multi-step queries than the chatbot baseline by correctly utilizing weather-conditional branching to decide between outdoor activities + hotels vs indoor cafe recommendations. Việc v2 áp dụng cấu trúc 5 thành phần cùng guardrails giúp đưa tỷ lệ parse errors về 0 và cắt giảm 50% độ trễ (latency) so với v1 trong các truy vấn.
 
 ---
 
@@ -34,11 +34,12 @@ The agent follows the **Thought → Action → Observation** cycle:
                        │
                        ▼
 ┌──────────────────────────────────────────────────┐
-│              SYSTEM PROMPT (v2)                   │
-│  • Tool descriptions (3 tools)                    │
-│  • ReAct format instructions                      │
-│  • Few-shot examples                              │
-│  • Guardrails & constraints                       │
+│        SYSTEM PROMPT (v2) - 5 Components          │
+│  1. Identity (Vai trò Agent)                      │
+│  2. Capabilities (Khai báo tool)                  │
+│  3. Instructions (Hướng dẫn suy luận)             │
+│  4. Constraints (Ràng buộc, cấm bịa đặt)          │
+│  5. Output format (Định dạng phản hồi)            │
 └──────────────────────┬───────────────────────────┘
                        │
           ┌────────────▼────────────┐
@@ -73,6 +74,15 @@ The agent follows the **Thought → Action → Observation** cycle:
       │ Conversation   │──── Loop back to LLM
       └────────────────┘             (if steps < max)
 ```
+
+**Hệ thống System Prompt v2 (5 Thành Phần Production-Grade)**:
+Việc nâng cấp từ v1 lên v2 tập trung vào việc chuẩn hóa System Prompt theo 5 thành phần:
+1. **Identity**: Xác lập vai trò chuyên biệt (VD: *"You are a travel planning agent for Vietnamese domestic flights"*).
+2. **Capabilities**: Khai báo công cụ agent có quyền truy cập (vd: `search_flights`, `get_weather`).
+3. **Instructions**: Hướng dẫn tư duy chi tiết (Break goals into sub-tasks. Use tools for real data. Nhận đủ evidence mới dừng).
+4. **Constraints**: Các giới hạn chặt chẽ (VD: *Max 5 tool calls. Never invent results. Never book without confirmation*).
+5. **Output format**: Định dạng bắt buộc để parser dễ dàng xử lý (VD: *Respond with either a tool_call JSON or a final_answer text*).
+*(Promp demo ở v1 thường bị thiếu phần 4 và 5 dẫn đến hệ thống bị ảo giác và xuất sai đầu ra, v2 Production prompt bắt buộc có constraints và output format rõ ràng).*
 
 **Branching Logic (Key Feature)**:
 ```
@@ -192,18 +202,20 @@ check_weather("Da Lat", "2026-04-11")
 
 ## 5. Ablation Studies & Experiments
 
-### Experiment 1: System Prompt v1 vs v2
+### Experiment 1: System Prompt v1 vs v2 (5 Production-Grade Components)
 
-| Feature | v1 | v2 |
+| Feature | v1 (Baseline) | v2 (Production-Grade) |
 | :--- | :--- | :--- |
-| Tool descriptions | Basic | Detailed with examples |
-| Few-shot examples | ❌ None | ✅ Full example conversation |
-| Guardrails | ❌ None | ✅ Error handling, format enforcement |
-| Retry logic | ❌ None | ✅ Re-prompt with correction hint |
-| Parse errors | 2 | 0 |
-| Avg latency | 5,581ms | 4,349ms |
+| **1. Identity** | ❌ Chung chung | ✅ Khai báo rõ vai trò và nhiệm vụ cốt lõi |
+| **2. Capabilities** | Mô tả công cụ cơ bản | ✅ Có tool descriptions & few-shot examples |
+| **3. Instructions** | Tư duy ReAct căn bản | ✅ Nhấn mạnh luồng chia nhỏ sub-tasks |
+| **4. Constraints** | ❌ Không có | ✅ Guardrails: Ngăn ảo giác (hallucination), auto-retry |
+| **5. Output Format**| ❌ JSON dễ lỗi | ✅ Quy định chặt chẽ, giảm parse errors |
+| **Kết quả kiểm thử:** | | |
+| **Parse errors** | 2 | **0** |
+| **Avg latency** | 5,581ms | **4,349ms** |
 
-**Result**: v2 reduced parse errors to **0** and cut average latency by **22%** due to fewer retry steps.
+**Result**: Bằng cách tổ chức lại prompt theo **5 thành phần**, đặc biệt bổ sung phần **Constraints** và kết hợp **Retry logic** giúp định dạng **Output** chính xác hơn, Agent v2 đã giảm parse errors về **0** và rút ngắn độ trễ trung bình **22%** (do hệ thống parser không bị crash và phải thực hiện lại request).
 
 ### Experiment 2: Chatbot vs Agent (Head-to-Head)
 
@@ -250,5 +262,3 @@ check_weather("Da Lat", "2026-04-11")
 
 ---
 
-> [!NOTE]
-> This report is submitted as `GROUP_REPORT_DANGVH.md` in the `report/group_report/` directory.
